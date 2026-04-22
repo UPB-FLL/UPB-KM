@@ -47,9 +47,9 @@ A custom backend is extra surface area we do not need. RLS + typed PostgREST + a
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│                        Web client (Next.js)                        │
-│   Dashboard · Inventory · Recipes · Prep · Line Checks · Receiving │
-└─────────────┬────────────────────────────────────┬─────────────────┘
+│                          Web client (Next.js)                          │
+│ Dashboard · Inventory · Recipes · Design · Prep · Line Checks · Receiving │
+└───────────────┬────────────────────────────────────┬───────────────────┘
               │ PostgREST (typed)                  │ Edge Functions
               ▼                                    ▼
 ┌─────────────────────────────────┐  ┌────────────────────────────┐
@@ -80,6 +80,7 @@ A custom backend is extra surface area we do not need. RLS + typed PostgREST + a
 - Plate cost = Σ (item qty in stock unit × latest unit cost). Sub-recipes recurse to their own cost per yield unit.
 - Computed by `cost_rollup` Edge Function on invoice save (costs changed) or recipe save (composition changed). Result written to `recipes.last_computed_cost` + `cost_computed_at`. We do not do it on every read.
 - Suggested menu price = `last_computed_cost / (1 - target_margin)` rounded to whole dollars. Displayed alongside the cook's actual `sell_price`.
+- `recipes.status` (`draft`/`testing`/`active`/`retired`) controls downstream visibility. Prep lists, line-cook views, and menus only see `active`. See §3.7 for the full lifecycle.
 
 ### 3.3 Prep Lists
 - A `prep_list` is a dated worksheet. Tasks can be:
@@ -114,6 +115,30 @@ Four roles; permissions are per-module, not per-table-column.
 | line_cook | view own station | view (no costs) | own tasks | own checks | — | — |
 
 "view (no costs)" is enforced at the view layer: line cooks query `recipes_public` which omits cost columns. RLS backs this up.
+
+### 3.7 Design Management
+The "design" layer is where a recipe moves from idea to menu item. It is split off from day-to-day recipe editing because the rhythm is different — R&D is slow, exploratory, and needs gates; the line needs a clean, approved catalog.
+
+- **Status column on `recipes`**: `draft` → `testing` → `active` → `retired`. Only `active` rows feed prep lists, line-cook views, and the public menu. `draft` and `testing` are invisible to line cooks; `retired` is hidden from new work but kept for history.
+- **`recipe_versions`**: every `active` → `active` edit, and every `testing` → `active` promotion, snapshots the full recipe (composition, yield, sell price, computed cost, margin, author, timestamp) into `recipe_versions`. One pinned version per recipe is the "menu truth"; others are history. This answers the M4 open question about version history.
+- **`menus` and `menu_items`**: a `menu` is a named, dated set (e.g. "Spring 2026 Dinner", "Friday Pizza Special"). `menu_items` links a recipe version to a menu with an effective date range. A recipe can sit on multiple menus; a menu can contain recipes not yet promoted to `active`, so the menu doubles as a release plan.
+- **Test kitchen batches**: cooking a `testing` recipe produces a `prep_batch` flagged `is_test = true`. Component SKUs still come out of stock (so R&D doesn't lie about inventory) but the output goes to a `test_kitchen` virtual location, not the line. Test cost is computed and attached to the draft for comparison against the target margin before approval.
+- **Approval**: the `draft|testing` → `active` transition is restricted to `owner` and `manager`. The transition is a single Edge Function (`promote_recipe`) that snapshots to `recipe_versions`, flips the status, invalidates the cost cache, and — if a `menu_item` references the recipe — publishes it on its effective date.
+- **Design assets**: each recipe owns optional plating photos, build diagrams, allergen tags, and plating notes. Stored in Supabase Storage under `recipes/{recipe_id}/`, served via signed URLs. Assets are versioned with the recipe: promoting a recipe version pins the assets of the moment.
+- **Diff view**: the design screen shows the current `active` version side-by-side with the candidate, with cost/margin delta and a per-ingredient diff. This is the one place where a manager reviews a change before it hits the line.
+
+Design Management is deliberately low-touch. It does not replace the quick recipe edit path for typos or price tweaks — those still update `recipes` directly and create a new `recipe_versions` row on save. It adds the gates, the history, and the staging ground around the decisions that matter.
+
+The permissions table in §3.6 extends with a `Design` column:
+
+| Role | Design |
+|------|--------|
+| owner | full |
+| manager | full |
+| kitchen_lead | draft + test, no promote |
+| line_cook | — |
+
+Line cooks never see the design surface; they query `recipes_active` (a view that filters `status = 'active'` and joins the pinned version).
 
 ---
 
@@ -215,7 +240,7 @@ Every domain table carries no `organization_id` today. The schema has a `setting
 ## 8. Open questions (to answer before / during M1)
 
 1. Sales data source — POS CSV import, or direct integration (Toast/Square)? Forecasting depends on it.
-2. Do we need recipe version history (M4) or does "last edit wins" hold for now?
+2. ~~Do we need recipe version history (M4) or does "last edit wins" hold for now?~~ Answered in §3.7: `recipe_versions` snapshots on every active-state save and on promotion.
 3. Line-cook visibility of sell price — yes or no? (Leaning no; they see cost-hidden recipe cards.)
 4. Tax handling on invoices — per-line or per-invoice? (Leaning per-invoice, allocated pro-rata into cost.)
 5. Waste reasons — free text or controlled vocabulary? (Leaning controlled: spoilage, over-prep, dropped, comp, staff meal.)
