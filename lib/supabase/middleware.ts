@@ -8,6 +8,13 @@ export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-url-pathname", request.nextUrl.pathname);
 
+  const passThrough = NextResponse.next({ request: { headers: requestHeaders } });
+
+  // Skip auth when Supabase env vars are not configured (e.g. preview without secrets).
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return passThrough;
+  }
+
   let response = NextResponse.next({
     request: { headers: requestHeaders },
   });
