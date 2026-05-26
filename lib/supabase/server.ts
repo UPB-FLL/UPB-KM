@@ -1,7 +1,19 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+const nullClient = {
+  auth: {
+    getUser: async () => ({ data: { user: null }, error: null }),
+    signOut: async () => ({ error: null }),
+    signInWithOtp: async () => ({ data: {}, error: new Error("Supabase not configured") }),
+  },
+} as unknown as ReturnType<typeof createServerClient>;
+
 export async function createClient() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return nullClient;
+  }
+
   const cookieStore = await cookies();
 
   return createServerClient(
