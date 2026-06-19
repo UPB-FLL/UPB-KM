@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------------------------------------------------------
+   Design tokens — see design-system.md §3
+   -------------------------------------------------------------------- */
+
+:root {
+  --upb-carbon:  #15110F;
+  --upb-ash:     #231D1A;
+  --upb-iron:    #3A302B;
+  --upb-bone:    #E8E1D6;
+  --upb-linen:   #F3ECDF;
+  --upb-chalk:   #FBF7EE;
+  --upb-dust:    #C9BFAE;
+
+  --upb-ember:     #D24A1A;
+  --upb-ember-ink: #2C0A00;
+  --upb-lichen:    #5E7C3A;
+  --upb-rust:      #9B2B1B;
+  --upb-amber:     #E4A21A;
+  --upb-slate:     #3D5463;
+
+  /* Semantic — day mode */
+  --surface:        var(--upb-linen);
+  --surface-raised: var(--upb-chalk);
+  --surface-sunken: #EDE6D6;
+  --ink:            #1A1613;
+  --ink-muted:      #5A4E44;
+  --border:         #C9BFAE;
+  --border-strong:  #8C7F6E;
+  --focus:          var(--upb-ember);
+  --accent:         var(--upb-ember);
+  --accent-ink:     var(--upb-ember-ink);
+  --success:        var(--upb-lichen);
+  --danger:         var(--upb-rust);
+  --warning:        var(--upb-amber);
+}
+
+.theme-night {
+  --surface:        var(--upb-carbon);
+  --surface-raised: var(--upb-ash);
+  --surface-sunken: #0E0A08;
+  --ink:            var(--upb-bone);
+  --ink-muted:      var(--upb-dust);
+  --border:         var(--upb-iron);
+  --border-strong:  #5A4A42;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+html, body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus rings — always visible, always 2px ember, no glow. */
+:where(a, button, [role="button"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Tabular numerals are the default, not a one-off utility. */
+.numeric { font-family: var(--font-mono), ui-monospace, monospace; }
